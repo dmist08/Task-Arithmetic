@@ -32,9 +32,6 @@ echo "Output:  ${OUTPUT_DIR}"
 echo "Device:  ${DEVICE}"
 echo "=============================================="
 
-# Activate conda
-eval "$(conda shell.bash hook)"
-conda activate task-arithmetic
 
 # Verify GPU
 echo ""
