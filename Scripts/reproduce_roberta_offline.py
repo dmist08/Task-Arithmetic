@@ -45,7 +45,7 @@ import torch
 import numpy as np
 
 from beir.datasets.data_loader import GenericDataLoader
-from beir.reranking.models import CrossEncoder
+from sentence_transformers import SentenceTransformer, util
 from elasticsearch import Elasticsearch
 from elasticsearch import helpers as es_helpers
 from transformers import AutoModel
@@ -102,7 +102,7 @@ def log_gpu(label, device="cuda"):
 
 
 # ---------------------------------------------------------------------------
-# Task Vector for RoBERTa
+# Task Vector for RoBERTa (using Bi-Encoder weights)
 # ---------------------------------------------------------------------------
 class TaskVectorRoBERTa:
     def __init__(self, pretrained_path, finetuned_path, device="cuda"):
@@ -122,77 +122,84 @@ class TaskVectorRoBERTa:
             torch.cuda.empty_cache()
             log_gpu("After computing task vector (freed base models)", device)
 
-    def apply_to(self, cross_encoder_path, scaling_coef=1.0, device="cuda"):
+    def apply_to(self, bi_encoder_path, scaling_coef=1.0, device="cuda"):
         with torch.no_grad():
-            ce_model = CrossEncoder(cross_encoder_path, max_length=512)
-            log_gpu("After loading Θ_T cross-encoder", device)
+            # Load the SentenceTransformer bi-encoder model
+            model = SentenceTransformer(bi_encoder_path, device=device)
+            log_gpu("After loading Θ_T bi-encoder", device)
 
-            ce_state_dict = ce_model.model.model.state_dict()
+            model_sd = model.state_dict()
             new_state_dict = {}
 
             matched, skipped = 0, 0
-            for key in ce_state_dict:
-                stripped = key.replace('roberta.', '', 1)
+            for key in model_sd:
+                # sentence-transformers models typically have the transformer backbone under "0.auto_model."
+                stripped = key.replace('0.auto_model.', '', 1)
                 if stripped in self.vector:
                     new_state_dict[key] = (
-                        ce_state_dict[key].to(device)
+                        model_sd[key].to(device)
                         + scaling_coef * self.vector[stripped].to(device)
                     )
                     matched += 1
                 else:
-                    new_state_dict[key] = ce_state_dict[key].to(device)
+                    new_state_dict[key] = model_sd[key].to(device)
                     skipped += 1
 
             logger.info(f"Task vector: {matched} keys merged, {skipped} kept (α={scaling_coef})")
-            ce_model.model.model.load_state_dict(new_state_dict, strict=False)
+            model.load_state_dict(new_state_dict, strict=False)
             log_gpu(f"After applying task vector (α={scaling_coef})", device)
 
-        return ce_model
+        return model
 
 
 # ---------------------------------------------------------------------------
-# Cross-encoder reranker
+# Bi-encoder reranker
 # ---------------------------------------------------------------------------
 class RerankCrossEncoder:
     def __init__(self, model, batch_size=128):
-        self.cross_encoder = model
+        self.model = model
         self.batch_size = batch_size
 
     def rerank(self, corpus, queries, results, top_k=100):
-        sentence_pairs, pair_ids = [], []
+        """
+        Rerank BM25 top-k results using bi-encoder cosine similarity.
+        """
+        logger.info(f"Re-ranking using bi-encoder ({len(results)} queries)")
+        start = time.time()
 
+        rerank_results = {}
         for query_id in results:
+            query_text = queries[query_id]
             doc_scores = results[query_id]
             if len(doc_scores) > top_k:
                 top_docs = sorted(doc_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
             else:
                 top_docs = list(doc_scores.items())
 
-            for doc_id, _ in top_docs:
-                pair_ids.append([query_id, doc_id])
-                corpus_text = (
-                    corpus[doc_id].get("title", "") + " " + corpus[doc_id].get("text", "")
-                ).strip()
-                sentence_pairs.append([queries[query_id], corpus_text])
+            if not top_docs:
+                rerank_results[query_id] = {}
+                continue
 
-        logger.info(f"Re-ranking {len(sentence_pairs)} pairs (top-{top_k})")
-        start = time.time()
-        raw_scores = self.cross_encoder.predict(sentence_pairs, batch_size=self.batch_size)
+            doc_ids = [d for d, _ in top_docs]
+            doc_texts = [
+                (corpus[did].get("title", "") + " " + corpus[did].get("text", "")).strip()
+                for did in doc_ids
+            ]
+
+            # Encode query and documents
+            q_emb = self.model.encode(query_text, convert_to_tensor=True, show_progress_bar=False)
+            d_embs = self.model.encode(doc_texts, batch_size=self.batch_size, convert_to_tensor=True, show_progress_bar=False)
+
+            # Compute cosine similarities
+            scores = util.cos_sim(q_emb, d_embs)[0].tolist()
+
+            rerank_results[query_id] = {
+                doc_ids[i]: float(scores[i])
+                for i in range(len(doc_ids))
+            }
+
         elapsed = time.time() - start
-        logger.info(f"Re-ranking took {elapsed:.1f}s ({len(sentence_pairs)/max(elapsed,0.01):.0f} pairs/sec)")
-
-        rerank_scores = []
-        for r in raw_scores:
-            try:
-                s = r[1]
-            except (TypeError, IndexError):
-                s = r
-            rerank_scores.append(float(s))
-
-        rerank_results = {qid: {} for qid in results}
-        for (qid, did), score in zip(pair_ids, rerank_scores):
-            rerank_results[qid][did] = score
-
+        logger.info(f"Re-ranking took {elapsed:.1f}s")
         return rerank_results
 
 
@@ -334,7 +341,7 @@ def evaluate_run(qrels_dict, bm25_results, rerank_results, run_name, alpha):
 @click.option("--skip_bm25", is_flag=True, default=False,
               help="Load pre-cached BM25 results instead of running Elasticsearch")
 @click.option("--output_dir", type=str, default="./results")
-@click.option("--theta_t", type=str, default="cross-encoder/stsb-roberta-base",
+@click.option("--theta_t", type=str, default="sentence-transformers/msmarco-roberta-base-v3",
               help="HF model ID for Θ_T (must match a downloaded model)")
 @click.option("--theta_0", type=str, default="roberta-base",
               help="HF model ID for Θ₀")
@@ -542,7 +549,7 @@ def main(cache_dir, mode, device, alfa, seed, batch_size, skip_bm25,
                                ["precision@10", "ndcg@3", "ndcg@10", "map@100"])
 
         # Θ_T alone (α=0 → just the IR model)
-        ce = CrossEncoder(theta_t_path, max_length=512)
+        ce = SentenceTransformer(theta_t_path, device=device)
         reranker = RerankCrossEncoder(ce, batch_size=batch_size)
         rerank_res = reranker.rerank(test_corpus, test_queries, bm25_test, top_k=100)
         theta_t_result = evaluate_run(test_qrels, bm25_test, rerank_res, "Theta_T", 0.0)
