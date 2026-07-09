@@ -48,8 +48,8 @@ def download_model(model_id, cache_dir):
 
 
 def download_germanquad(cache_dir):
-    """Download GermanQuAD (official MTEB version) and convert to BEIR format."""
-    from datasets import Dataset
+    """Download GermanQuAD (full 11,537 corpus version) and convert to BEIR format."""
+    import pandas as pd
     from huggingface_hub import hf_hub_download
 
     out_dir = os.path.join(cache_dir, "datasets", "germanquad")
@@ -59,62 +59,80 @@ def download_germanquad(cache_dir):
         print("  [SKIP] GermanQuAD already converted")
         return out_dir
 
-    print("  [DOWNLOAD] mteb/germanquad-retrieval (via arrow) ...")
+    print("  [DOWNLOAD] deepset/germanquad train + test parquets ...")
 
-    # 1. Download Corpus
-    corpus_path = hf_hub_download(
-        repo_id="mteb/germanquad-retrieval",
-        filename="corpus/data-00000-of-00001.arrow",
+    # 1. Download Test split (contains the test queries)
+    test_path = hf_hub_download(
+        repo_id="deepset/germanquad",
+        filename="plain_text/test/0000.parquet",
         repo_type="dataset",
+        revision="refs/convert/parquet",
     )
-    df_corpus = Dataset.from_file(corpus_path).to_pandas()
+    df_test = pd.read_parquet(test_path)
 
-    # 2. Download Queries
-    queries_path = hf_hub_download(
-        repo_id="mteb/germanquad-retrieval",
-        filename="queries/data-00000-of-00001.arrow",
+    # 2. Download Train split (contains remaining contexts for the corpus)
+    train_path = hf_hub_download(
+        repo_id="deepset/germanquad",
+        filename="plain_text/train/0000.parquet",
         repo_type="dataset",
+        revision="refs/convert/parquet",
     )
-    df_queries = Dataset.from_file(queries_path).to_pandas()
-
-    # 3. Download Qrels
-    qrels_path = hf_hub_download(
-        repo_id="mteb/germanquad-retrieval-qrels",
-        filename="test/data-00000-of-00001.arrow",
-        repo_type="dataset",
-    )
-    df_qrels = Dataset.from_file(qrels_path).to_pandas()
+    df_train = pd.read_parquet(train_path)
 
     os.makedirs(qrels_dir, exist_ok=True)
 
-    # Write corpus
-    with open(os.path.join(out_dir, "corpus.jsonl"), "w", encoding="utf-8") as f:
-        for _, row in df_corpus.iterrows():
-            # MTEB corpus format: _id, title, text
-            doc_id = str(row["_id"])
-            title = str(row.get("title", ""))
-            text = str(row.get("text", ""))
-            f.write(json.dumps({"_id": doc_id, "title": title, "text": text}, ensure_ascii=False) + "\n")
+    # Build corpus from all unique contexts (from both train and test splits)
+    corpus = {}   # doc_id → {"title": "", "text": context}
+    queries = {}  # q_id → question
+    qrels = {}    # q_id → {doc_id: relevance}
 
-    # Write queries
+    context_to_id = {}  # Map context text to doc_id for de-duplication
+    doc_counter = 0
+
+    # Add all unique contexts from Train split to corpus
+    for _, row in df_train.iterrows():
+        context = str(row["context"]).strip()
+        if context not in context_to_id:
+            doc_id = f"doc_{doc_counter}"
+            context_to_id[context] = doc_id
+            corpus[doc_id] = {"title": "", "text": context}
+            doc_counter += 1
+
+    # Add all unique contexts from Test split, and construct queries & qrels
+    for i, row in df_test.iterrows():
+        context = str(row["context"]).strip()
+        question = str(row["question"]).strip()
+
+        if context not in context_to_id:
+            doc_id = f"doc_{doc_counter}"
+            context_to_id[context] = doc_id
+            corpus[doc_id] = {"title": "", "text": context}
+            doc_counter += 1
+        else:
+            doc_id = context_to_id[context]
+
+        q_id = f"q_{i}"
+        queries[q_id] = question
+        qrels[q_id] = {doc_id: 1}
+
+    # Write BEIR corpus format
+    with open(os.path.join(out_dir, "corpus.jsonl"), "w", encoding="utf-8") as f:
+        for doc_id, doc in corpus.items():
+            f.write(json.dumps({"_id": doc_id, **doc}, ensure_ascii=False) + "\n")
+
+    # Write BEIR queries format
     with open(os.path.join(out_dir, "queries.jsonl"), "w", encoding="utf-8") as f:
-        for _, row in df_queries.iterrows():
-            # MTEB queries format: _id, text
-            q_id = str(row["_id"])
-            text = str(row.get("text", ""))
+        for q_id, text in queries.items():
             f.write(json.dumps({"_id": q_id, "text": text}, ensure_ascii=False) + "\n")
 
-    # Write qrels
+    # Write BEIR qrels format
     with open(os.path.join(qrels_dir, "test.tsv"), "w", encoding="utf-8") as f:
         f.write("query-id\tcorpus-id\tscore\n")
-        for _, row in df_qrels.iterrows():
-            # MTEB qrels format: query-id, corpus-id, score
-            qid = str(row["query-id"])
-            cid = str(row["corpus-id"])
-            score = int(row["score"])
-            f.write(f"{qid}\t{cid}\t{score}\n")
+        for q_id, rels in qrels.items():
+            for doc_id, score in rels.items():
+                f.write(f"{q_id}\t{doc_id}\t{score}\n")
 
-    print(f"  [OK] GermanQuAD: {len(df_corpus)} docs, {len(df_queries)} queries → {out_dir}")
+    print(f"  [OK] GermanQuAD: {len(corpus)} docs (contexts), {len(queries)} queries → {out_dir}")
     return out_dir
 
 
