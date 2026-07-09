@@ -334,7 +334,7 @@ def main(cache_dir, mode, device, alfa, seed, batch_size, skip_bm25,
     if torch.cuda.is_available():
         torch.cuda.set_device(device)
         props = torch.cuda.get_device_properties(device)
-        logger.info(f"GPU: {props.name}, VRAM: {props.total_mem / (1024**3):.1f} GB")
+        logger.info(f"GPU: {props.name}, VRAM: {props.total_memory / (1024**3):.1f} GB")
         log_gpu("Session start", device)
 
     # Helper to get or run BM25
