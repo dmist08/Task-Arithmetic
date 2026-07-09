@@ -12,3 +12,4 @@ urllib3>=1.26.0,<2.0.0         # elasticsearch<8 requires urllib3<2
 pytrec-eval-terrier>=0.5.6
 ir-measures>=0.3.3
 huggingface_hub>=0.20.0
+sentencepiece>=0.1.99
