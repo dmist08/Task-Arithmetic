@@ -48,7 +48,7 @@ def download_model(model_id, cache_dir):
 
 
 def download_germanquad(cache_dir):
-    """Download GermanQuAD and convert to BEIR format."""
+    """Download GermanQuAD (official MTEB version) and convert to BEIR format."""
     import pandas as pd
     from huggingface_hub import hf_hub_download
 
@@ -59,59 +59,65 @@ def download_germanquad(cache_dir):
         print("  [SKIP] GermanQuAD already converted")
         return out_dir
 
-    print("  [DOWNLOAD] deepset/germanquad (via parquet) ...")
-    # Download the raw parquet file directly from refs/convert/parquet branch
-    parquet_path = hf_hub_download(
-        repo_id="deepset/germanquad",
-        filename="plain_text/test/0000.parquet",
+    print("  [DOWNLOAD] mteb/germanquad-retrieval (via parquet) ...")
+
+    # 1. Download Corpus
+    corpus_path = hf_hub_download(
+        repo_id="mteb/germanquad-retrieval",
+        filename="corpus/corpus/0000.parquet",
         repo_type="dataset",
         revision="refs/convert/parquet",
     )
-    ds = pd.read_parquet(parquet_path)
+    df_corpus = pd.read_parquet(corpus_path)
+
+    # 2. Download Queries
+    queries_path = hf_hub_download(
+        repo_id="mteb/germanquad-retrieval",
+        filename="queries/queries/0000.parquet",
+        repo_type="dataset",
+        revision="refs/convert/parquet",
+    )
+    df_queries = pd.read_parquet(queries_path)
+
+    # 3. Download Qrels
+    qrels_path = hf_hub_download(
+        repo_id="mteb/germanquad-retrieval-qrels",
+        filename="default/test/0000.parquet",
+        repo_type="dataset",
+        revision="refs/convert/parquet",
+    )
+    df_qrels = pd.read_parquet(qrels_path)
 
     os.makedirs(qrels_dir, exist_ok=True)
 
-    # Build corpus from unique contexts and queries from questions
-    corpus = {}   # doc_id → {"title": "", "text": context}
-    queries = {}  # q_id → question
-    qrels = {}    # q_id → {doc_id: relevance}
-
-    context_to_id = {}  # dedup contexts
-    doc_counter = 0
-
-    for i, row in ds.iterrows():
-        context = str(row["context"]).strip()
-        question = str(row["question"]).strip()
-
-        # Assign doc_id for this context (dedup)
-        if context not in context_to_id:
-            doc_id = f"doc_{doc_counter}"
-            context_to_id[context] = doc_id
-            corpus[doc_id] = {"title": "", "text": context}
-            doc_counter += 1
-        else:
-            doc_id = context_to_id[context]
-
-        q_id = f"q_{i}"
-        queries[q_id] = question
-        qrels[q_id] = {doc_id: 1}
-
-    # Write BEIR format
+    # Write corpus
     with open(os.path.join(out_dir, "corpus.jsonl"), "w", encoding="utf-8") as f:
-        for doc_id, doc in corpus.items():
-            f.write(json.dumps({"_id": doc_id, **doc}, ensure_ascii=False) + "\n")
+        for _, row in df_corpus.iterrows():
+            # MTEB corpus format: _id, title, text
+            doc_id = str(row["_id"])
+            title = str(row.get("title", ""))
+            text = str(row.get("text", ""))
+            f.write(json.dumps({"_id": doc_id, "title": title, "text": text}, ensure_ascii=False) + "\n")
 
+    # Write queries
     with open(os.path.join(out_dir, "queries.jsonl"), "w", encoding="utf-8") as f:
-        for q_id, text in queries.items():
+        for _, row in df_queries.iterrows():
+            # MTEB queries format: _id, text
+            q_id = str(row["_id"])
+            text = str(row.get("text", ""))
             f.write(json.dumps({"_id": q_id, "text": text}, ensure_ascii=False) + "\n")
 
+    # Write qrels
     with open(os.path.join(qrels_dir, "test.tsv"), "w", encoding="utf-8") as f:
         f.write("query-id\tcorpus-id\tscore\n")
-        for q_id, rels in qrels.items():
-            for doc_id, score in rels.items():
-                f.write(f"{q_id}\t{doc_id}\t{score}\n")
+        for _, row in df_qrels.iterrows():
+            # MTEB qrels format: query-id, corpus-id, score
+            qid = str(row["query-id"])
+            cid = str(row["corpus-id"])
+            score = int(row["score"])
+            f.write(f"{qid}\t{cid}\t{score}\n")
 
-    print(f"  [OK] GermanQuAD: {len(corpus)} docs, {len(queries)} queries → {out_dir}")
+    print(f"  [OK] GermanQuAD: {len(df_corpus)} docs, {len(df_queries)} queries → {out_dir}")
     return out_dir
 
 
