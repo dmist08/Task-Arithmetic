@@ -23,6 +23,12 @@ DEVICE="cuda:0"
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 
+# Logging — mirror all output (stdout + stderr) to a timestamped log file
+mkdir -p "${OUTPUT_DIR}"
+MAIN_LOG="${OUTPUT_DIR}/run_gpunode_$(date +%Y%m%d_%H%M%S).log"
+exec > >(tee -a "${MAIN_LOG}") 2>&1
+echo "Logging to: ${MAIN_LOG}"
+
 echo "=============================================="
 echo "Task Arithmetic — Offline Reproduction"
 echo "Started: $(date)"
