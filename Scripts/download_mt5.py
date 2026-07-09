@@ -116,8 +116,14 @@ def download_germanquad(cache_dir):
 
 
 def download_miracl(cache_dir, languages=("fr", "es", "en")):
-    """Download MIRACL dev splits and convert to BEIR format."""
-    from datasets import load_dataset
+    """Download MIRACL dev splits and convert to BEIR format directly from files."""
+    import gzip
+    from huggingface_hub import list_repo_files, hf_hub_download
+
+    # Get lists of files once
+    print("  [INFO] Fetching file list from miracl/miracl and miracl/miracl-corpus...")
+    corpus_repo_files = list_repo_files(repo_id="miracl/miracl-corpus", repo_type="dataset")
+    topics_repo_files = list_repo_files(repo_id="miracl/miracl", repo_type="dataset")
 
     for lang in languages:
         out_dir = os.path.join(cache_dir, "datasets", f"miracl_{lang}")
@@ -128,52 +134,84 @@ def download_miracl(cache_dir, languages=("fr", "es", "en")):
             continue
 
         print(f"  [DOWNLOAD] miracl/miracl ({lang}) ...")
-        try:
-            # Load corpus
-            corpus_ds = load_dataset("miracl/miracl-corpus", lang, split="train")
-            # Load dev queries + qrels
-            dev_ds = load_dataset("miracl/miracl", lang, split="dev")
-        except Exception as e:
-            print(f"  [WARN] Could not download MIRACL-{lang}: {e}")
-            print(f"         Try: pip install datasets[streaming]")
+
+        # 1. Find and download corpus files (.jsonl.gz)
+        prefix_corpus = f"miracl-corpus-v1.0-{lang}/"
+        corpus_files = [f for f in corpus_repo_files if f.startswith(prefix_corpus) and f.endswith(".jsonl.gz")]
+
+        if not corpus_files:
+            print(f"  [WARN] No corpus files found for language: {lang}. Skipping.")
             continue
 
         os.makedirs(qrels_dir, exist_ok=True)
 
-        # Write corpus
+        print(f"    Downloading {len(corpus_files)} corpus files...")
         corpus = {}
-        with open(os.path.join(out_dir, "corpus.jsonl"), "w", encoding="utf-8") as f:
-            for row in corpus_ds:
-                doc_id = str(row["docid"])
-                title = row.get("title", "")
-                text = row.get("text", "")
-                corpus[doc_id] = True
-                f.write(json.dumps({"_id": doc_id, "title": title, "text": text}, ensure_ascii=False) + "\n")
+        with open(os.path.join(out_dir, "corpus.jsonl"), "w", encoding="utf-8") as out_f:
+            for c_file in corpus_files:
+                local_path = hf_hub_download(
+                    repo_id="miracl/miracl-corpus",
+                    filename=c_file,
+                    repo_type="dataset"
+                )
+                # Read gzip and write to corpus.jsonl
+                with gzip.open(local_path, "rt", encoding="utf-8") as gz_f:
+                    for line in gz_f:
+                        row = json.loads(line)
+                        doc_id = str(row["docid"])
+                        title = row.get("title", "")
+                        text = row.get("text", "")
+                        corpus[doc_id] = True
+                        out_f.write(json.dumps({"_id": doc_id, "title": title, "text": text}, ensure_ascii=False) + "\n")
 
-        # Write queries and qrels
+        # 2. Find and download topics and qrels files (.tsv)
+        prefix_topics = f"miracl-v1.0-{lang}/"
+        try:
+            topics_file_name = [f for f in topics_repo_files if f.startswith(prefix_topics) and "topics" in f and "dev.tsv" in f][0]
+            qrels_file_name = [f for f in topics_repo_files if f.startswith(prefix_topics) and "qrels" in f and "dev.tsv" in f][0]
+        except IndexError:
+            print(f"  [WARN] Topics/qrels not found for language: {lang} in dev split. Skipping.")
+            continue
+
+        local_topics_path = hf_hub_download(
+            repo_id="miracl/miracl",
+            filename=topics_file_name,
+            repo_type="dataset"
+        )
+        local_qrels_path = hf_hub_download(
+            repo_id="miracl/miracl",
+            filename=qrels_file_name,
+            repo_type="dataset"
+        )
+
+        # 3. Read and write queries
         queries = {}
-        qrels = {}
-        for row in dev_ds:
-            q_id = str(row["query_id"])
-            queries[q_id] = row["query"]
-            qrels[q_id] = {}
-            for pos in row.get("positive_passages", []):
-                qrels[q_id][str(pos["docid"])] = 1
-            for neg in row.get("negative_passages", []):
-                qrels[q_id][str(neg["docid"])] = 0
+        with open(local_topics_path, "r", encoding="utf-8") as f:
+            # Format: query_id\tquery
+            for line in f:
+                parts = line.strip().split("\t")
+                if len(parts) >= 2:
+                    queries[parts[0]] = parts[1]
 
         with open(os.path.join(out_dir, "queries.jsonl"), "w", encoding="utf-8") as f:
             for q_id, text in queries.items():
                 f.write(json.dumps({"_id": q_id, "text": text}, ensure_ascii=False) + "\n")
 
-        with open(os.path.join(qrels_dir, "dev.tsv"), "w", encoding="utf-8") as f:
-            f.write("query-id\tcorpus-id\tscore\n")
-            for q_id, rels in qrels.items():
-                for doc_id, score in rels.items():
-                    if score > 0:
-                        f.write(f"{q_id}\t{doc_id}\t{score}\n")
+        # 4. Read and write qrels
+        qrels_count = 0
+        with open(os.path.join(qrels_dir, "dev.tsv"), "w", encoding="utf-8") as out_qrels_f:
+            out_qrels_f.write("query-id\tcorpus-id\tscore\n")
+            with open(local_qrels_path, "r", encoding="utf-8") as f:
+                # Format: query_id\t0\tdoc_id\trelevance
+                for line in f:
+                    parts = line.strip().split("\t")
+                    if len(parts) >= 4:
+                        qid, _, did, rel = parts
+                        if int(rel) > 0:
+                            out_qrels_f.write(f"{qid}\t{did}\t{rel}\n")
+                            qrels_count += 1
 
-        print(f"  [OK] MIRACL-{lang}: {len(corpus)} docs, {len(queries)} queries → {out_dir}")
+        print(f"  [OK] MIRACL-{lang}: {len(corpus)} docs, {len(queries)} queries, {qrels_count} qrels → {out_dir}")
 
 
 def main():
