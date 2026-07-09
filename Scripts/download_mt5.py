@@ -59,7 +59,13 @@ def download_germanquad(cache_dir):
         return out_dir
 
     print("  [DOWNLOAD] deepset/germanquad ...")
-    ds = load_dataset("deepset/germanquad", split="test")
+    try:
+        ds = load_dataset("deepset/germanquad", split="test", trust_remote_code=True)
+    except Exception:
+        # Fallback: load from raw parquet files on HuggingFace
+        print("  [FALLBACK] Loading via parquet...")
+        ds = load_dataset("deepset/germanquad", split="test",
+                          data_files={"test": "data/test-*"}, trust_remote_code=True)
 
     os.makedirs(qrels_dir, exist_ok=True)
 
