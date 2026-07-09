@@ -59,34 +59,31 @@ def download_germanquad(cache_dir):
         print("  [SKIP] GermanQuAD already converted")
         return out_dir
 
-    print("  [DOWNLOAD] mteb/germanquad-retrieval (via parquet) ...")
+    print("  [DOWNLOAD] mteb/germanquad-retrieval (via arrow) ...")
 
     # 1. Download Corpus
     corpus_path = hf_hub_download(
         repo_id="mteb/germanquad-retrieval",
-        filename="corpus/corpus/0000.parquet",
+        filename="corpus/data-00000-of-00001.arrow",
         repo_type="dataset",
-        revision="refs/convert/parquet",
     )
-    df_corpus = pd.read_parquet(corpus_path)
+    df_corpus = pd.read_feather(corpus_path)
 
     # 2. Download Queries
     queries_path = hf_hub_download(
         repo_id="mteb/germanquad-retrieval",
-        filename="queries/queries/0000.parquet",
+        filename="queries/data-00000-of-00001.arrow",
         repo_type="dataset",
-        revision="refs/convert/parquet",
     )
-    df_queries = pd.read_parquet(queries_path)
+    df_queries = pd.read_feather(queries_path)
 
     # 3. Download Qrels
     qrels_path = hf_hub_download(
         repo_id="mteb/germanquad-retrieval-qrels",
-        filename="default/test/0000.parquet",
+        filename="test/data-00000-of-00001.arrow",
         repo_type="dataset",
-        revision="refs/convert/parquet",
     )
-    df_qrels = pd.read_parquet(qrels_path)
+    df_qrels = pd.read_feather(qrels_path)
 
     os.makedirs(qrels_dir, exist_ok=True)
 
