@@ -48,91 +48,75 @@ def download_model(model_id, cache_dir):
 
 
 def download_germanquad(cache_dir):
-    """Download GermanQuAD (full 11,537 corpus version) and convert to BEIR format."""
-    import pandas as pd
-    from huggingface_hub import hf_hub_download
+    """Download GermanQuAD (official BEIR version) and extract it."""
+    import urllib.request
+    import zipfile
+    import shutil
 
     out_dir = os.path.join(cache_dir, "datasets", "germanquad")
-    qrels_dir = os.path.join(out_dir, "qrels")
-
+    
     if os.path.exists(os.path.join(out_dir, "corpus.jsonl")):
         print("  [SKIP] GermanQuAD already converted")
         return out_dir
 
-    print("  [DOWNLOAD] deepset/germanquad train + test parquets ...")
+    print("  [DOWNLOAD] BEIR GermanQuAD dataset (zip) ...")
+    
+    # 1. Download official BEIR zip
+    url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/germanquad.zip"
+    zip_dir = os.path.join(cache_dir, "datasets")
+    os.makedirs(zip_dir, exist_ok=True)
+    zip_path = os.path.join(zip_dir, "germanquad.zip")
+    
+    urllib.request.urlretrieve(url, zip_path)
+    
+    # 2. Extract zip
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        zip_ref.extractall(zip_dir)
+        
+    # Clean up the zip file
+    if os.path.exists(zip_path):
+        os.remove(zip_path)
+        
+    print(f"  [OK] GermanQuAD: successfully downloaded and extracted to {out_dir}")
 
-    # 1. Download Test split (contains the test queries)
-    test_path = hf_hub_download(
-        repo_id="deepset/germanquad",
-        filename="plain_text/test/0000.parquet",
-        repo_type="dataset",
-        revision="refs/convert/parquet",
-    )
-    df_test = pd.read_parquet(test_path)
+    # --- Strict Dataset Inspection and Verification ---
+    print("  [INSPECT] Verifying GermanQuAD dataset integrity...")
+    corpus_file = os.path.join(out_dir, "corpus.jsonl")
+    queries_file = os.path.join(out_dir, "queries.jsonl")
+    qrels_file = os.path.join(out_dir, "qrels", "test.tsv")
 
-    # 2. Download Train split (contains remaining contexts for the corpus)
-    train_path = hf_hub_download(
-        repo_id="deepset/germanquad",
-        filename="plain_text/train/0000.parquet",
-        repo_type="dataset",
-        revision="refs/convert/parquet",
-    )
-    df_train = pd.read_parquet(train_path)
+    errors = []
+    # Check if files exist
+    for f_path in [corpus_file, queries_file, qrels_file]:
+        if not os.path.exists(f_path):
+            errors.append(f"Missing file: {os.path.basename(f_path)}")
 
-    os.makedirs(qrels_dir, exist_ok=True)
+    if errors:
+        raise FileNotFoundError(f"Verification FAILED: {', '.join(errors)}")
 
-    # Build corpus from all unique contexts (from both train and test splits)
-    corpus = {}   # doc_id → {"title": "", "text": context}
-    queries = {}  # q_id → question
-    qrels = {}    # q_id → {doc_id: relevance}
+    # Count lines
+    with open(corpus_file, "r", encoding="utf-8") as f:
+        corpus_count = sum(1 for _ in f)
 
-    context_to_id = {}  # Map context text to doc_id for de-duplication
-    doc_counter = 0
+    with open(queries_file, "r", encoding="utf-8") as f:
+        queries_count = sum(1 for _ in f)
 
-    # Add all unique contexts from Train split to corpus
-    for _, row in df_train.iterrows():
-        context = str(row["context"]).strip()
-        if context not in context_to_id:
-            doc_id = f"doc_{doc_counter}"
-            context_to_id[context] = doc_id
-            corpus[doc_id] = {"title": "", "text": context}
-            doc_counter += 1
+    with open(qrels_file, "r", encoding="utf-8") as f:
+        # Subtract 1 for the TSV header
+        qrels_count = sum(1 for _ in f) - 1
 
-    # Add all unique contexts from Test split, and construct queries & qrels
-    for i, row in df_test.iterrows():
-        context = str(row["context"]).strip()
-        question = str(row["question"]).strip()
+    print(f"    - Corpus documents: {corpus_count} (Expected: 11537)")
+    print(f"    - Queries:          {queries_count} (Expected: 2204)")
+    print(f"    - Qrels:            {qrels_count}")
 
-        if context not in context_to_id:
-            doc_id = f"doc_{doc_counter}"
-            context_to_id[context] = doc_id
-            corpus[doc_id] = {"title": "", "text": context}
-            doc_counter += 1
-        else:
-            doc_id = context_to_id[context]
+    # Raise error if counts are wrong (e.g. truncated download or wrong branch)
+    if corpus_count != 11537 or queries_count != 2204:
+        raise ValueError(
+            f"Verification FAILED: Expected 11537 docs and 2204 queries, "
+            f"but got {corpus_count} docs and {queries_count} queries!"
+        )
 
-        q_id = f"q_{i}"
-        queries[q_id] = question
-        qrels[q_id] = {doc_id: 1}
-
-    # Write BEIR corpus format
-    with open(os.path.join(out_dir, "corpus.jsonl"), "w", encoding="utf-8") as f:
-        for doc_id, doc in corpus.items():
-            f.write(json.dumps({"_id": doc_id, **doc}, ensure_ascii=False) + "\n")
-
-    # Write BEIR queries format
-    with open(os.path.join(out_dir, "queries.jsonl"), "w", encoding="utf-8") as f:
-        for q_id, text in queries.items():
-            f.write(json.dumps({"_id": q_id, "text": text}, ensure_ascii=False) + "\n")
-
-    # Write BEIR qrels format
-    with open(os.path.join(qrels_dir, "test.tsv"), "w", encoding="utf-8") as f:
-        f.write("query-id\tcorpus-id\tscore\n")
-        for q_id, rels in qrels.items():
-            for doc_id, score in rels.items():
-                f.write(f"{q_id}\t{doc_id}\t{score}\n")
-
-    print(f"  [OK] GermanQuAD: {len(corpus)} docs (contexts), {len(queries)} queries → {out_dir}")
+    print("  [SUCCESS] GermanQuAD dataset verification passed successfully!")
     return out_dir
 
 
