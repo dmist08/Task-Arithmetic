@@ -470,6 +470,9 @@ def main(cache_dir, dataset, mode, device, alfa, seed, batch_size, skip_bm25, ou
         datefmt="%Y-%m-%d %H:%M:%S",
         level=logging.INFO,
     )
+    # Suppress verbose HTTP request logs from elasticsearch and urllib3
+    logging.getLogger("elasticsearch").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
 
     # Config for this dataset
     ds_cfg = DATASET_CONFIG[dataset]

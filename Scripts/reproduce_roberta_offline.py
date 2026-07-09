@@ -359,6 +359,9 @@ def main(cache_dir, mode, device, alfa, seed, batch_size, skip_bm25,
         datefmt="%Y-%m-%d %H:%M:%S",
         level=logging.INFO,
     )
+    # Suppress verbose HTTP request logs from elasticsearch and urllib3
+    logging.getLogger("elasticsearch").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
 
     # Resolve local paths
     theta_0_path = model_path(cache_dir, theta_0)

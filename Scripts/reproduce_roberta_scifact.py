@@ -274,6 +274,9 @@ def main(mode, device, alfa, seed, batch_size, model_base_path, model_pretrained
         datefmt="%Y-%m-%d %H:%M:%S",
         level=logging.INFO,
     )
+    # Suppress verbose HTTP request logs from elasticsearch and urllib3
+    logging.getLogger("elasticsearch").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
 
     logger.info("=" * 70)
     logger.info(f"Mode: {mode}")
