@@ -112,7 +112,7 @@ def main():
     hf_models = [
         ("roberta-base", "Θ₀ — base pretrained"),
         ("allenai/biomed_roberta_base", "Θ_D — BioMed-RoBERTa (domain)"),
-        ("sentence-transformers/msmarco-roberta-base-v3", "Θ_T — bi-encoder (IR)"),
+        ("cross-encoder/stsb-roberta-base", "Θ_T — cross-encoder (IR)"),
     ]
 
     for model_id, description in hf_models:
