@@ -45,9 +45,8 @@ import torch
 import numpy as np
 
 from beir.datasets.data_loader import GenericDataLoader
-from beir.retrieval.evaluation import EvaluateRetrieval
-from beir.retrieval.search.lexical import BM25Search as BM25
 from beir.reranking.models import CrossEncoder
+from rank_bm25 import BM25Okapi
 from transformers import AutoModel
 
 from ranx import Qrels, Run, compare, fuse, evaluate
@@ -200,16 +199,32 @@ class RerankCrossEncoder:
 # BM25
 # ---------------------------------------------------------------------------
 def run_bm25(index_name, corpus, queries):
+    """Pure-Python BM25 via rank_bm25 — no Elasticsearch required."""
+    import re
     logger.info(f"Running BM25: {index_name} ({len(corpus)} docs, {len(queries)} queries)")
     start = time.time()
-    bm25_model = BM25(
-        index_name=index_name,
-        hostname="localhost",
-        initialize=True,
-        number_of_shards=1,
-    )
-    retriever = EvaluateRetrieval(bm25_model)
-    results = retriever.retrieve(corpus, queries)
+
+    def tokenize(text):
+        return re.sub(r'[^\w\s]', ' ', text.lower()).split()
+
+    doc_ids = list(corpus.keys())
+    corpus_tokens = [
+        tokenize(corpus[did].get("title", "") + " " + corpus[did].get("text", ""))
+        for did in doc_ids
+    ]
+    bm25 = BM25Okapi(corpus_tokens)
+    logger.info(f"BM25 index built in {time.time()-start:.1f}s")
+
+    results = {}
+    for query_id, query_text in queries.items():
+        scores = bm25.get_scores(tokenize(query_text))
+        top_indices = scores.argsort()[::-1][:100]
+        results[query_id] = {
+            doc_ids[i]: float(scores[i])
+            for i in top_indices
+            if scores[i] > 0
+        }
+
     logger.info(f"BM25 done in {time.time()-start:.1f}s")
     return results
 
