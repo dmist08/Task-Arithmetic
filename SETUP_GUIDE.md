@@ -1,97 +1,115 @@
 # Reproduction Setup Guide — RoBERTa-base on SciFact
 
-Step-by-step instructions to run the Task Arithmetic reproduction on your H200 cluster.
+Two workflows: **Online** (node with internet + GPU) and **Offline** (RTX 6000 / gpunode1 without internet).
 
 ## Prerequisites
 
-- NVIDIA GPU with >= 8GB VRAM (RoBERTa-base is ~125M params x3 models, well under any modern GPU)
-- Python 3.9+
-- Java 11+ (required for Elasticsearch)
+- NVIDIA GPU with >= 8GB VRAM (RoBERTa-base is ~125M params x3 models)
+- Python 3.9+, conda
+- Java 11+ (required for Elasticsearch, login node only)
 
-## Step 0: Clone and switch to branch
-
-```bash
-git clone https://github.com/dmist08/Task-Arithmetic.git
-cd Task-Arithmetic
-```
-
-## Step 1: Create conda environment
+## Step 1: Create conda environment (login node)
 
 ```bash
 conda create -n task-arithmetic python=3.11 -y
 conda activate task-arithmetic
-
-# Install PyTorch with CUDA (adjust CUDA version as needed)
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
-
-# Install all dependencies
 pip install -r requirements.txt
 ```
 
-### Verify GPU access
-
+Verify GPU (on gpunode1):
 ```bash
 python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}, Device: {torch.cuda.get_device_name(0)}')"
 ```
 
-## Step 2: Start Elasticsearch (required for BM25)
+---
 
-The BEIR library's BM25 implementation uses Elasticsearch under the hood.
+## OFFLINE WORKFLOW (for RTX 6000 / gpunode1 without internet)
+
+### Step 2: Download everything (login node — has internet)
 
 ```bash
-# One-time setup
+conda activate task-arithmetic
+cd Task-Arithmetic
+python Scripts/download_all.py --cache_dir ./offline_cache
+```
+
+This downloads to `offline_cache/`:
+- `datasets/scifact/` and `datasets/nfcorpus/` (BEIR datasets)
+- `models/roberta-base/` (Θ₀, ~500MB)
+- `models/allenai__biomed_roberta_base/` (Θ_D, ~500MB)
+- `models/cross-encoder__stsb-roberta-base/` (Θ_T, ~500MB)
+
+Total: ~1.5 GB
+
+### Step 3: Run BM25 and cache results (login node — needs Elasticsearch)
+
+```bash
+# Start Elasticsearch (one-time)
 bash Scripts/setup_elasticsearch.sh
 
-# Verify it's running
+# Save BM25 results for all splits
+cd Scripts
+python reproduce_roberta_offline.py --cache_dir ../offline_cache --mode save_bm25
+```
+
+This saves JSON files to `offline_cache/bm25_cache/`.
+
+### Step 4: Run on gpunode1 (fully offline)
+
+```bash
+# SSH into gpunode1
+conda activate task-arithmetic
+cd Task-Arithmetic/Scripts
+
+# α-sweep on dev sets
+python reproduce_roberta_offline.py \
+    --cache_dir ../offline_cache \
+    --mode dev_sweep \
+    --skip_bm25 \
+    --device cuda:0
+
+# Test with best α
+python reproduce_roberta_offline.py \
+    --cache_dir ../offline_cache \
+    --mode test \
+    --alfa 0.3 \
+    --skip_bm25 \
+    --device cuda:0
+
+# Baselines
+python reproduce_roberta_offline.py \
+    --cache_dir ../offline_cache \
+    --mode baselines \
+    --skip_bm25 \
+    --device cuda:0
+```
+
+Output: `results/dev_sweep_results.csv`, `results/test_results.csv`
+
+---
+
+## ONLINE WORKFLOW (node with internet + GPU, e.g. H200)
+
+### Step 2: Start Elasticsearch
+
+```bash
+bash Scripts/setup_elasticsearch.sh
 curl http://localhost:9200
 ```
 
-If your cluster already has Elasticsearch or doesn't allow installing software, you can use Docker:
-
-```bash
-docker run -d --name elasticsearch -p 9200:9200 \
-  -e "discovery.type=single-node" \
-  -e "xpack.security.enabled=false" \
-  -e "ES_JAVA_OPTS=-Xms512m -Xmx512m" \
-  elasticsearch:7.17.9
-```
-
-## Step 3: Download datasets only (optional pre-step)
+### Step 3: Run (downloads models/datasets automatically)
 
 ```bash
 cd Scripts
-python reproduce_roberta_scifact.py --mode download_only
-```
 
-This downloads SciFact (~5K docs) and NFCorpus (~3.6K docs) from BEIR.
-
-## Step 4: Run the reproduction
-
-### 4a: α-sweep on dev sets (find best α)
-
-```bash
+# α-sweep
 python reproduce_roberta_scifact.py --mode dev_sweep --device cuda:0
-```
 
-This sweeps α from 0.0 to 1.0 in steps of 0.1, evaluating on:
-- SciFact train (20% of queries, following the base paper)
-- NFCorpus dev
-
-Output: `results/dev_sweep_results.csv`
-
-Expected: best α should be around 0.3 for RoBERTa-base.
-
-### 4b: Test evaluation with chosen α
-
-```bash
+# Test
 python reproduce_roberta_scifact.py --mode test --alfa 0.3 --device cuda:0
-```
 
-Output: `results/test_results.csv`
-
-### 4c: Baselines (BM25, Θ_T alone)
-
-```bash
+# Baselines
 python reproduce_roberta_scifact.py --mode baselines --device cuda:0
 ```
 
