@@ -60,11 +60,12 @@ def download_germanquad(cache_dir):
         return out_dir
 
     print("  [DOWNLOAD] deepset/germanquad (via parquet) ...")
-    # Download the raw parquet file directly — avoids broken dataset script
+    # Download the raw parquet file directly from refs/convert/parquet branch
     parquet_path = hf_hub_download(
         repo_id="deepset/germanquad",
-        filename="data/test-00000-of-00001.parquet",
+        filename="plain_text/test/0000.parquet",
         repo_type="dataset",
+        revision="refs/convert/parquet",
     )
     ds = pd.read_parquet(parquet_path)
 
