@@ -49,7 +49,7 @@ def download_model(model_id, cache_dir):
 
 def download_germanquad(cache_dir):
     """Download GermanQuAD (official MTEB version) and convert to BEIR format."""
-    import pandas as pd
+    from datasets import Dataset
     from huggingface_hub import hf_hub_download
 
     out_dir = os.path.join(cache_dir, "datasets", "germanquad")
@@ -67,7 +67,7 @@ def download_germanquad(cache_dir):
         filename="corpus/data-00000-of-00001.arrow",
         repo_type="dataset",
     )
-    df_corpus = pd.read_feather(corpus_path)
+    df_corpus = Dataset.from_file(corpus_path).to_pandas()
 
     # 2. Download Queries
     queries_path = hf_hub_download(
@@ -75,7 +75,7 @@ def download_germanquad(cache_dir):
         filename="queries/data-00000-of-00001.arrow",
         repo_type="dataset",
     )
-    df_queries = pd.read_feather(queries_path)
+    df_queries = Dataset.from_file(queries_path).to_pandas()
 
     # 3. Download Qrels
     qrels_path = hf_hub_download(
@@ -83,7 +83,7 @@ def download_germanquad(cache_dir):
         filename="test/data-00000-of-00001.arrow",
         repo_type="dataset",
     )
-    df_qrels = pd.read_feather(qrels_path)
+    df_qrels = Dataset.from_file(qrels_path).to_pandas()
 
     os.makedirs(qrels_dir, exist_ok=True)
 
