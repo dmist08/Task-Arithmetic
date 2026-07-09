@@ -129,16 +129,27 @@ class TaskVectorRoBERTa:
             log_gpu("After loading Θ_T bi-encoder", device)
 
             model_sd = model.state_dict()
+            logger.info(f"First 5 model keys: {list(model_sd.keys())[:5]}")
+            logger.info(f"First 5 vector keys: {list(self.vector.keys())[:5]}")
             new_state_dict = {}
 
             matched, skipped = 0, 0
             for key in model_sd:
-                # sentence-transformers models typically have the transformer backbone under "0.auto_model."
-                stripped = key.replace('0.auto_model.', '', 1)
-                if stripped in self.vector:
+                matched_key = None
+                if key in self.vector:
+                    matched_key = key
+                else:
+                    for prefix in ["0.auto_model.", "roberta."]:
+                        if key.startswith(prefix):
+                            stripped = key[len(prefix):]
+                            if stripped in self.vector:
+                                matched_key = stripped
+                                break
+
+                if matched_key is not None:
                     new_state_dict[key] = (
                         model_sd[key].to(device)
-                        + scaling_coef * self.vector[stripped].to(device)
+                        + scaling_coef * self.vector[matched_key].to(device)
                     )
                     matched += 1
                 else:
