@@ -25,12 +25,21 @@ def load_baselines_from_log(log_path):
         lines = f.readlines()
 
     for line in lines:
-        if "BASELINES" in line or "RESULTS" in line:
-            continue
-        # Format: BM25 / BM25+Theta_T followed by floats
+        # Discard log prefix (e.g., date, time, logger name, log level)
+        if "INFO" in line:
+            line = line.split("INFO")[-1]
+            
         parts = line.strip().split()
         if len(parts) >= 5:
             variant = parts[0]
+            # Normalize names (supporting Greek letters and different spellings)
+            if variant == "BM25+Theta_T" or "Theta_T" in variant or "Θ_T" in variant:
+                variant = "BM25+Theta_T"
+            elif variant == "BM25":
+                variant = "BM25"
+            else:
+                continue
+
             try:
                 scores = [float(p) for p in parts[1:5]]
                 results[variant] = {
@@ -52,19 +61,23 @@ def main():
 
     # Let's find files
     test_csv = os.path.join(results_dir, "mt5_germanquad_test.csv")
-    log_file = os.path.join(results_dir, "mt5_germanquad_baselines.log")
 
-    # Find the latest log file to load baseline scores
+    # Load baseline scores from log files (newest to oldest)
+    our_scores = {}
     log_files = [f for f in os.listdir(results_dir) if f.startswith("mt5_gpunode_") and f.endswith(".log")]
-    if log_files:
-        log_file = os.path.join(results_dir, sorted(log_files)[-1])
-    elif not os.path.exists(test_csv):
-        print(f"No results files found in {results_dir} yet.")
-        print("Please run `bash Scripts/run_mt5_gpunode.sh` first.")
-        return
-
-    # Load baseline scores
-    our_scores = load_baselines_from_log(log_file)
+    # Sort descending so we process the latest files first
+    log_files = sorted(log_files, reverse=True)
+    
+    for lf in log_files:
+        log_path = os.path.join(results_dir, lf)
+        scores = load_baselines_from_log(log_path)
+        # Merge scores, preferring newer ones but not overwriting if already found
+        for k, v in scores.items():
+            if k not in our_scores:
+                our_scores[k] = v
+        # Stop searching if we successfully filled both baselines
+        if "BM25" in our_scores and "BM25+Theta_T" in our_scores:
+            break
 
     # Load test/TA scores
     if os.path.exists(test_csv):
