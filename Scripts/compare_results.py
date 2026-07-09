@@ -54,15 +54,14 @@ def main():
     test_csv = os.path.join(results_dir, "mt5_germanquad_test.csv")
     log_file = os.path.join(results_dir, "mt5_germanquad_baselines.log")
 
-    if not os.path.exists(test_csv):
-        # Check for any log file to parse as fallback
-        log_files = [f for f in os.listdir(results_dir) if f.startswith("mt5_gpunode_") and f.endswith(".log")]
-        if log_files:
-            log_file = os.path.join(results_dir, sorted(log_files)[-1])
-        else:
-            print(f"No results files found in {results_dir} yet.")
-            print("Please run `bash Scripts/run_mt5_gpunode.sh` first.")
-            return
+    # Find the latest log file to load baseline scores
+    log_files = [f for f in os.listdir(results_dir) if f.startswith("mt5_gpunode_") and f.endswith(".log")]
+    if log_files:
+        log_file = os.path.join(results_dir, sorted(log_files)[-1])
+    elif not os.path.exists(test_csv):
+        print(f"No results files found in {results_dir} yet.")
+        print("Please run `bash Scripts/run_mt5_gpunode.sh` first.")
+        return
 
     # Load baseline scores
     our_scores = load_baselines_from_log(log_file)
