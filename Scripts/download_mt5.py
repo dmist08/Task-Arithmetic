@@ -105,14 +105,14 @@ def download_germanquad(cache_dir):
         # Subtract 1 for the TSV header
         qrels_count = sum(1 for _ in f) - 1
 
-    print(f"    - Corpus documents: {corpus_count} (Expected: 11537)")
-    print(f"    - Queries:          {queries_count} (Expected: 2204)")
+    print(f"    - Corpus documents: {corpus_count} (Expected: 2800349)")
+    print(f"    - Queries:          {queries_count} (Expected: 2044)")
     print(f"    - Qrels:            {qrels_count}")
 
     # Raise error if counts are wrong (e.g. truncated download or wrong branch)
-    if corpus_count != 11537 or queries_count != 2204:
+    if corpus_count != 2800349 or queries_count != 2044:
         raise ValueError(
-            f"Verification FAILED: Expected 11537 docs and 2204 queries, "
+            f"Verification FAILED: Expected 2800349 docs and 2044 queries, "
             f"but got {corpus_count} docs and {queries_count} queries!"
         )
 
