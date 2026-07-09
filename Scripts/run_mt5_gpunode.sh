@@ -23,6 +23,10 @@ echo "Log:     ${LOG_FILE}"
 echo "=============================================="
 
 cd "${PROJECT_DIR}"
+# Source conda profile setup to allow activation inside non-interactive shells
+if [ -f "/home/research5/miniconda3/etc/profile.d/conda.sh" ]; then
+    source "/home/research5/miniconda3/etc/profile.d/conda.sh"
+fi
 conda activate task
 
 # --- Check prerequisites ---
