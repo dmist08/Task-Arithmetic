@@ -49,7 +49,8 @@ def download_model(model_id, cache_dir):
 
 def download_germanquad(cache_dir):
     """Download GermanQuAD and convert to BEIR format."""
-    from datasets import load_dataset
+    import pandas as pd
+    from huggingface_hub import hf_hub_download
 
     out_dir = os.path.join(cache_dir, "datasets", "germanquad")
     qrels_dir = os.path.join(out_dir, "qrels")
@@ -58,14 +59,14 @@ def download_germanquad(cache_dir):
         print("  [SKIP] GermanQuAD already converted")
         return out_dir
 
-    print("  [DOWNLOAD] deepset/germanquad ...")
-    try:
-        ds = load_dataset("deepset/germanquad", split="test", trust_remote_code=True)
-    except Exception:
-        # Fallback: load from raw parquet files on HuggingFace
-        print("  [FALLBACK] Loading via parquet...")
-        ds = load_dataset("deepset/germanquad", split="test",
-                          data_files={"test": "data/test-*"}, trust_remote_code=True)
+    print("  [DOWNLOAD] deepset/germanquad (via parquet) ...")
+    # Download the raw parquet file directly — avoids broken dataset script
+    parquet_path = hf_hub_download(
+        repo_id="deepset/germanquad",
+        filename="data/test-00000-of-00001.parquet",
+        repo_type="dataset",
+    )
+    ds = pd.read_parquet(parquet_path)
 
     os.makedirs(qrels_dir, exist_ok=True)
 
@@ -77,9 +78,9 @@ def download_germanquad(cache_dir):
     context_to_id = {}  # dedup contexts
     doc_counter = 0
 
-    for i, row in enumerate(ds):
-        context = row["context"].strip()
-        question = row["question"].strip()
+    for i, row in ds.iterrows():
+        context = str(row["context"]).strip()
+        question = str(row["question"]).strip()
 
         # Assign doc_id for this context (dedup)
         if context not in context_to_id:
