@@ -29,7 +29,6 @@ from transformers import BertTokenizer, BertModel
 import torch
 from ranx import compare
 from ranx import Qrels, Run, compare, fuse, optimize_fusion
-from monot5 import MonoT5
 from transformers import AutoModelForSeq2SeqLM
 import numpy as np
 import torch
