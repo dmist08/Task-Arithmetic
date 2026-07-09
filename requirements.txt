@@ -2,7 +2,6 @@ torch>=2.0.0
 transformers>=4.35.0
 sentence-transformers>=2.7.0
 beir>=2.0.0
-rank_bm25>=0.2.2               # pure-Python BM25 (replaces BEIR's abstract BM25Search in 2.x)
 ranx>=0.3.16
 click>=8.0
 numpy>=1.24.0,<2.0.0

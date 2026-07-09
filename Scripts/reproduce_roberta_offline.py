@@ -46,7 +46,8 @@ import numpy as np
 
 from beir.datasets.data_loader import GenericDataLoader
 from beir.reranking.models import CrossEncoder
-from rank_bm25 import BM25Okapi
+from elasticsearch import Elasticsearch
+from elasticsearch import helpers as es_helpers
 from transformers import AutoModel
 
 from ranx import Qrels, Run, compare, fuse, evaluate
@@ -198,31 +199,76 @@ class RerankCrossEncoder:
 # ---------------------------------------------------------------------------
 # BM25
 # ---------------------------------------------------------------------------
-def run_bm25(index_name, corpus, queries):
-    """Pure-Python BM25 via rank_bm25 — no Elasticsearch required."""
-    import re
-    logger.info(f"Running BM25: {index_name} ({len(corpus)} docs, {len(queries)} queries)")
+def run_bm25(index_name, corpus, queries, hostname="localhost", port=9200, top_k=100):
+    """
+    BM25 retrieval via Elasticsearch — matches the BEIR/paper pipeline.
+    Requires Elasticsearch 7.x running on localhost:9200 (start with setup_elasticsearch.sh).
+    """
+    logger.info(f"Running BM25 via Elasticsearch: {index_name} ({len(corpus)} docs, {len(queries)} queries)")
     start = time.time()
 
-    def tokenize(text):
-        return re.sub(r'[^\w\s]', ' ', text.lower()).split()
+    es = Elasticsearch(f"http://{hostname}:{port}", timeout=120)
+    if not es.ping():
+        raise ConnectionError(
+            f"Cannot connect to Elasticsearch at {hostname}:{port}. "
+            "Run Scripts/setup_elasticsearch.sh first."
+        )
 
-    doc_ids = list(corpus.keys())
-    corpus_tokens = [
-        tokenize(corpus[did].get("title", "") + " " + corpus[did].get("text", ""))
-        for did in doc_ids
+    # Re-create index fresh
+    if es.indices.exists(index=index_name):
+        es.indices.delete(index=index_name)
+    es.indices.create(
+        index=index_name,
+        body={
+            "settings": {
+                "number_of_shards": 1,
+                "number_of_replicas": 0,
+                "similarity": {"default": {"type": "BM25"}},
+            },
+            "mappings": {
+                "properties": {
+                    "title": {"type": "text"},
+                    "text":  {"type": "text"},
+                }
+            },
+        },
+    )
+
+    # Bulk index corpus
+    actions = [
+        {
+            "_index": index_name,
+            "_id": doc_id,
+            "_source": {
+                "title": corpus[doc_id].get("title", ""),
+                "text":  corpus[doc_id].get("text",  ""),
+            },
+        }
+        for doc_id in corpus
     ]
-    bm25 = BM25Okapi(corpus_tokens)
-    logger.info(f"BM25 index built in {time.time()-start:.1f}s")
+    es_helpers.bulk(es, actions, chunk_size=500, request_timeout=120)
+    es.indices.refresh(index=index_name)
+    logger.info(f"Indexed {len(corpus)} docs in {time.time()-start:.1f}s")
 
+    # Query
     results = {}
     for query_id, query_text in queries.items():
-        scores = bm25.get_scores(tokenize(query_text))
-        top_indices = scores.argsort()[::-1][:100]
+        resp = es.search(
+            index=index_name,
+            body={
+                "query": {
+                    "multi_match": {
+                        "query": query_text,
+                        "fields": ["title", "text"],
+                        "type": "best_fields",
+                    }
+                },
+                "size": top_k,
+            },
+        )
         results[query_id] = {
-            doc_ids[i]: float(scores[i])
-            for i in top_indices
-            if scores[i] > 0
+            hit["_id"]: float(hit["_score"])
+            for hit in resp["hits"]["hits"]
         }
 
     logger.info(f"BM25 done in {time.time()-start:.1f}s")
