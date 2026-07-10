@@ -30,7 +30,7 @@ echo "=== Starting Elasticsearch ==="
 cd "$HOME/elasticsearch-${ES_VERSION}"
 
 # Single-node discovery (no cluster needed)
-export ES_JAVA_OPTS="-Xms512m -Xmx512m"
+export ES_JAVA_OPTS="-Xms8g -Xmx8g"
 ./bin/elasticsearch -d -p pid \
     -E discovery.type=single-node \
     -E xpack.security.enabled=false
