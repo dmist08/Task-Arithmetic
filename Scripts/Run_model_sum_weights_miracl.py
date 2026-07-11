@@ -159,6 +159,8 @@ def main(language, output_folder, alfa, model_name, device, model_base_path, mod
 
     logger.info(f'Loading dataset miracl in: {language}')
 
+    if language=='german':
+        lang='de'
     if language=='spanish':
         lang='es'  # or any of the 16 languages
     if language=='french':
