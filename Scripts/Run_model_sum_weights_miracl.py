@@ -168,8 +168,8 @@ def main(language, output_folder, alfa, model_name, device, model_base_path, mod
     if language=='english':
         lang='en'
 
-    miracl = datasets.load_dataset('miracl/miracl', lang)
-    miracl_corpus = datasets.load_dataset('miracl/miracl-corpus', lang)
+    miracl = datasets.load_dataset('miracl/miracl', lang, trust_remote_code=True)
+    miracl_corpus = datasets.load_dataset('miracl/miracl-corpus', lang, trust_remote_code=True)
 
 
     test_queries = {}
