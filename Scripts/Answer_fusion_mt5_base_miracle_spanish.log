@@ -1,0 +1,45 @@
+2026-07-11 21:42:24,357 main INFO Loading dataset miracl in: spanish
+2026-07-11 21:59:40,927 root INFO Activating Elasticsearch....
+2026-07-11 21:59:40,939 root INFO Elastic Search Credentials: {'hostname': 'localhost', 'index_name': 'miracl_spanish', 'keys': {'title': 'title', 'body': 'txt'}, 'timeout': 100, 'retry_on_timeout': True, 'maxsize': 24, 'number_of_shards': 1, 'language': 'spanish'}
+2026-07-11 21:59:40,940 root INFO Deleting previous Elasticsearch-Index named - miracl_spanish
+2026-07-11 21:59:42,957 root INFO Creating fresh Elasticsearch-Index named - miracl_spanish
+2026-07-11 22:21:56,699 root INFO Starting cycle over all lambda values
+2026-07-11 22:21:56,699 root INFO Value of lambda: 0
+2026-07-11 22:23:03,603 root INFO Starting To Rerank Top-100....
+2026-07-11 22:30:51,943 root INFO Value of lambda: 0.5
+2026-07-11 22:31:09,649 root INFO Starting To Rerank Top-100....
+2026-07-11 22:39:35,764 main INFO Loading dataset miracl in: spanish
+2026-07-11 22:41:12,326 root INFO Activating Elasticsearch....
+2026-07-11 22:41:12,328 root INFO Elastic Search Credentials: {'hostname': 'localhost', 'index_name': 'miracl_spanish', 'keys': {'title': 'title', 'body': 'txt'}, 'timeout': 100, 'retry_on_timeout': True, 'maxsize': 24, 'number_of_shards': 1, 'language': 'spanish'}
+2026-07-11 22:41:12,329 root INFO Deleting previous Elasticsearch-Index named - miracl_spanish
+2026-07-11 22:41:15,689 root INFO Creating fresh Elasticsearch-Index named - miracl_spanish
+2026-07-11 23:08:31,126 root INFO Starting cycle over all lambda values
+2026-07-11 23:08:31,127 root INFO Value of lambda: 0
+2026-07-11 23:08:47,514 root INFO Starting To Rerank Top-100....
+2026-07-11 23:16:34,859 root INFO Value of lambda: 0.5
+2026-07-11 23:16:44,997 huggingface_hub.utils._http WARNING '(ReadTimeoutError("HTTPSConnectionPool(host='huggingface.co', port=443): Read timed out. (read timeout=10)"), '(Request ID: 3aca7780-7732-4034-ac05-7e4812a1f43c)')' thrown while requesting HEAD https://huggingface.co/unicamp-dl/mt5-base-mmarco-v2/resolve/main/config.json
+2026-07-11 23:16:44,997 huggingface_hub.utils._http WARNING Retrying in 1s [Retry 1/5].
+2026-07-11 23:17:04,857 root INFO Starting To Rerank Top-100....
+2026-07-11 23:24:43,499 root INFO Running baselines, i.e. models minus and plus, and BM25
+2026-07-11 23:24:49,99 root INFO Starting To Rerank Top-100....
+2026-07-11 23:32:33,426 root INFO Starting To Rerank Top-100....
+2026-07-11 23:40:03,190 main INFO Final Report with dataset miracl in language:
+2026-07-11 23:40:03,190 main INFO 
+spanish
+2026-07-11 23:40:03,190 main INFO Final Report with models:
+2026-07-11 23:40:03,190 main INFO 
+mt5_base
+2026-07-11 23:40:03,190 main INFO 
+unicamp-dl/mt5-base-mmarco-v2
+2026-07-11 23:40:03,190 main INFO 
+google/mt5-base
+2026-07-11 23:40:03,190 main INFO 
+airKlizz/mt5-base-wikinewssum-spanish
+2026-07-11 23:40:03,192 main INFO 
+#    Model                            P@10       NDCG@3     NDCG@10      Recall@100  MAP@100
+---  -------------------------------  ---------  ---------  ---------  ------------  ---------
+a    BM25 +mt5_base-sum-lambda-0      0.201ᶜᵈᵉ   0.373ᶜᵈᵉ   0.405ᶜᵈᵉ           0.65  0.323ᶜᵈᵉ
+b    BM25 +mt5_base-sum-lambda-0.5    0.211ᵃᶜᵈᵉ  0.410ᵃᶜᵈᵉ  0.435ᵃᶜᵈᵉ          0.65  0.351ᵃᶜᵈᵉ
+c    BM25 +mt5_base_original_version  0.094      0.173      0.191              0.65  0.152
+d    BM25 +mt5_base_domain_specific   0.097      0.172      0.191              0.65  0.153
+e    BM25                             0.135ᶜᵈ    0.248ᶜᵈ    0.270ᶜᵈ            0.65  0.215ᶜᵈ

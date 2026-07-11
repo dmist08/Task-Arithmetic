@@ -1,0 +1,33 @@
+2026-07-11 23:40:23,360 main INFO Loading dataset miracl in: english
+2026-07-12 00:23:31,356 root INFO Activating Elasticsearch....
+2026-07-12 00:23:31,356 root INFO Elastic Search Credentials: {'hostname': 'localhost', 'index_name': 'miracl_english', 'keys': {'title': 'title', 'body': 'txt'}, 'timeout': 100, 'retry_on_timeout': True, 'maxsize': 24, 'number_of_shards': 1, 'language': 'english'}
+2026-07-12 00:23:31,357 root INFO Deleting previous Elasticsearch-Index named - miracl_english
+2026-07-12 00:23:33,369 root INFO Creating fresh Elasticsearch-Index named - miracl_english
+2026-07-12 01:32:54,299 root INFO Starting cycle over all lambda values
+2026-07-12 01:32:54,300 root INFO Value of lambda: 0
+2026-07-12 01:33:35,557 root INFO Starting To Rerank Top-100....
+2026-07-12 01:43:11,450 root INFO Value of lambda: 0.5
+2026-07-12 01:43:27,447 root INFO Starting To Rerank Top-100....
+2026-07-12 01:52:57,955 root INFO Running baselines, i.e. models minus and plus, and BM25
+2026-07-12 01:53:03,310 root INFO Starting To Rerank Top-100....
+2026-07-12 02:02:45,652 root INFO Starting To Rerank Top-100....
+2026-07-12 02:11:58,753 main INFO Final Report with dataset miracl in language:
+2026-07-12 02:11:58,754 main INFO 
+english
+2026-07-12 02:11:58,754 main INFO Final Report with models:
+2026-07-12 02:11:58,754 main INFO 
+mt5_base
+2026-07-12 02:11:58,754 main INFO 
+unicamp-dl/mt5-base-mmarco-v2
+2026-07-12 02:11:58,754 main INFO 
+google/mt5-base
+2026-07-12 02:11:58,754 main INFO 
+airKlizz/mt5-base-wikinewssum-english
+2026-07-12 02:11:58,756 main INFO 
+#    Model                            P@10       NDCG@3     NDCG@10      Recall@100  MAP@100
+---  -------------------------------  ---------  ---------  ---------  ------------  ---------
+a    BM25 +mt5_base-sum-lambda-0      0.145ᶜᵈᵉ   0.339ᶜᵈᵉ   0.412ᶜᵈᵉ          0.744  0.336ᶜᵈᵉ
+b    BM25 +mt5_base-sum-lambda-0.5    0.150ᵃᶜᵈᵉ  0.361ᵃᶜᵈᵉ  0.432ᵃᶜᵈᵉ         0.744  0.355ᵃᶜᵈᵉ
+c    BM25 +mt5_base_original_version  0.075      0.175      0.211             0.744  0.174
+d    BM25 +mt5_base_domain_specific   0.079      0.180      0.225             0.744  0.187
+e    BM25                             0.107ᶜᵈ    0.251ᶜᵈ    0.303ᶜᵈ           0.744  0.247ᶜᵈ
