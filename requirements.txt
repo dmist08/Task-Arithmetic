@@ -1,15 +1,28 @@
+# Requirements for Task-Arithmetic-for-ZS-IR reproduction
+# Tested with Python 3.11, CUDA 12.x
+# 
+# IMPORTANT: Install in this order to avoid dependency conflicts
+
+# === Core ML ===
 torch>=2.0.0
-transformers>=4.35.0
-sentence-transformers>=2.7.0
-beir>=2.0.0
-ranx>=0.3.16
-click>=8.0
-numpy>=1.24.0,<2.0.0
-tqdm>=4.65.0
-datasets>=2.14.0
-elasticsearch>=7.9.0,<8.0.0
-urllib3>=1.26.0,<2.0.0         # elasticsearch<8 requires urllib3<2
-pytrec-eval-terrier>=0.5.6
-ir-measures>=0.3.3
-huggingface_hub>=0.20.0
-sentencepiece>=0.1.99
+transformers>=4.30.0,<4.46.0    # needs T5 with `past` param in prepare_inputs_for_generation
+
+# === BEIR (Information Retrieval benchmark) ===
+# Must use PyPI version (0.x) — NOT GitHub master which broke BM25Search
+beir==0.0.9
+
+# === Elasticsearch Python client (must match ES 7.17.x on server) ===
+elasticsearch>=7.0.0,<8.0.0
+
+# === Dataset loading ===
+datasets>=2.14.0,<3.0.0         # needs loading script support for MIRACL
+
+# === Ranking/Evaluation ===
+ranx>=0.3.0
+
+# === Sentence embeddings (needed for MiniLM/RoBERTa experiments in Table 1) ===
+sentence-transformers>=2.2.0
+
+# === CLI and utilities ===
+click>=8.0.0
+tqdm>=4.60.0
