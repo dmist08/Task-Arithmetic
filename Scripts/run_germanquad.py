@@ -114,6 +114,7 @@ def main(model_base_path, model_vector_minus_path, model_vector_plus_path,
     token_true  = '▁yes'
 
     lista_results_combined = []
+    fusion_params = {'weights': (0.5, 0.5)}
 
     # ── λ=0 : Theta_T alone (no task vector) ──────────────────────────────
     logger.info('Running Theta_T (lambda=0)...')
@@ -122,8 +123,13 @@ def main(model_base_path, model_vector_minus_path, model_vector_plus_path,
         model_vector_plus_path, test_corpus, test_queries,
         results_bm25_test, coef=0.0
     )
-    run_theta_t = Run(results_theta_t, name=f'BM25 +{model_name}-sum-lambda-0')
-    lista_results_combined.append(run_theta_t)
+    run_theta_t = Run(results_theta_t, name=f'{model_name}-sum-lambda-0')
+    fused_theta_t = fuse(
+        runs=[bm25_run_test, run_theta_t],
+        norm="min-max", method="wsum", params=fusion_params
+    )
+    fused_theta_t.name = f'BM25 +{model_name}-sum-lambda-0'
+    lista_results_combined.append(fused_theta_t)
 
     # ── λ=alfa : Task Arithmetic ───────────────────────────────────────────
     logger.info(f'Running Task Arithmetic (lambda={alfa})...')
@@ -132,20 +138,31 @@ def main(model_base_path, model_vector_minus_path, model_vector_plus_path,
         model_vector_plus_path, test_corpus, test_queries,
         results_bm25_test, coef=alfa
     )
-    run_ta = Run(results_ta, name=f'BM25 +{model_name}-sum-lambda-{alfa}')
-    lista_results_combined.append(run_ta)
+    run_ta = Run(results_ta, name=f'{model_name}-sum-lambda-{alfa}')
+    fused_ta = fuse(
+        runs=[bm25_run_test, run_ta],
+        norm="min-max", method="wsum", params=fusion_params
+    )
+    fused_ta.name = f'BM25 +{model_name}-sum-lambda-{alfa}'
+    lista_results_combined.append(fused_ta)
 
     # ── Baselines: Theta_0 and Theta_D ────────────────────────────────────
     for path, label in [
-        (model_vector_minus_path, f'BM25 +{model_name}_original_version'),
-        (model_vector_plus_path,  f'BM25 +{model_name}_domain_specific'),
+        (model_vector_minus_path, f'{model_name}_original_version'),
+        (model_vector_plus_path,  f'{model_name}_domain_specific'),
     ]:
         logger.info(f'Running baseline: {label}...')
         results = evaluate_baseline(
             device, path, token_false, token_true,
             test_corpus, test_queries, results_bm25_test
         )
-        lista_results_combined.append(Run(results, name=label))
+        run_baseline = Run(results, name=label)
+        fused_baseline = fuse(
+            runs=[bm25_run_test, run_baseline],
+            norm="min-max", method="wsum", params=fusion_params
+        )
+        fused_baseline.name = f'BM25 +{label}'
+        lista_results_combined.append(fused_baseline)
 
     # ── Final comparison ───────────────────────────────────────────────────
     lista_results_combined.append(bm25_run_test)
