@@ -1,27 +1,29 @@
 # Requirements for Task-Arithmetic-for-ZS-IR reproduction
 # Tested with Python 3.11, CUDA 12.x
-# 
-# IMPORTANT: Install in this order to avoid dependency conflicts
+#
+# Install order matters — install beir from GitHub first
+
+# === BEIR v2.1.0 (has both beir.reranking AND concrete BM25Search) ===
+# pip install "git+https://github.com/beir-cellar/beir.git@v2.1.0"
 
 # === Core ML ===
 torch>=2.0.0
-transformers>=4.30.0,<4.46.0    # needs T5 with `past` param in prepare_inputs_for_generation
-
-# === BEIR (Information Retrieval benchmark) ===
-# Must use PyPI version (0.x) — NOT GitHub master which broke BM25Search
-beir==0.0.9
+transformers>=4.30.0,<4.46.0
 
 # === Elasticsearch Python client (must match ES 7.17.x on server) ===
 elasticsearch>=7.0.0,<8.0.0
 
 # === Dataset loading ===
-datasets>=2.14.0,<3.0.0         # needs loading script support for MIRACL
+datasets>=2.14.0,<3.0.0
 
 # === Ranking/Evaluation ===
 ranx>=0.3.0
 
-# === Sentence embeddings (needed for MiniLM/RoBERTa experiments in Table 1) ===
+# === Sentence embeddings (for MiniLM/RoBERTa experiments) ===
 sentence-transformers>=2.2.0
+
+# === TensorFlow (required by beir's USE-QA module import) ===
+tensorflow-hub
 
 # === CLI and utilities ===
 click>=8.0.0
