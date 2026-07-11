@@ -37,7 +37,7 @@ def applyBM25(test_corpus, test_queries, name='test'):
 
 def apply_reranking(device, model_base_path, model_vector_minus_path,
                     model_vector_plus_path, test_corpus, test_queries,
-                    results_bm25_test, coef):
+                    results_bm25_test, coef, batch_size=512):
     # GermanQuAD uses ▁no / ▁yes tokens (not ▁false / ▁true)
     token_false = '▁no'
     token_true  = '▁yes'
@@ -53,19 +53,19 @@ def apply_reranking(device, model_base_path, model_vector_minus_path,
     sum_model.to(device)
     cross_encoder_model.model.load_state_dict(new_state_dict, strict=False)
 
-    reranker = RerankT5(cross_encoder_model, batch_size=128)
+    reranker = RerankT5(cross_encoder_model, batch_size=batch_size)
     results = reranker.rerank(test_corpus, test_queries, results_bm25_test, top_k=100)
     return results
 
 
 def evaluate_baseline(device, model_path, token_false, token_true,
-                      test_corpus, test_queries, results_bm25_test):
+                      test_corpus, test_queries, results_bm25_test, batch_size=512):
     cross_encoder_model = MonoT5(
         model_path,
         token_false=token_false,
         token_true=token_true
     )
-    reranker = RerankT5(cross_encoder_model, batch_size=128)
+    reranker = RerankT5(cross_encoder_model, batch_size=batch_size)
     results = reranker.rerank(test_corpus, test_queries, results_bm25_test, top_k=100)
     return results
 
@@ -78,9 +78,10 @@ def evaluate_baseline(device, model_path, token_false, token_true,
 @click.option("--alfa",       type=float, required=True, help="Task vector scaling coefficient (0=Theta_T, 0.5=recommended, 1=full vector)")
 @click.option("--model_name", type=str, default="mt5_base")
 @click.option("--seed",       type=int, default=42)
+@click.option("--batch_size",  type=int, default=512, help="Reranking batch size (128=paper default, 512+ for H200)")
 @click.option("--output_folder", type=str, default="./Risultati")
 def main(model_base_path, model_vector_minus_path, model_vector_plus_path,
-         device, alfa, model_name, seed, output_folder):
+         device, alfa, model_name, seed, batch_size, output_folder):
 
     if seed:
         seed_everything(seed)
@@ -121,7 +122,7 @@ def main(model_base_path, model_vector_minus_path, model_vector_plus_path,
     results_theta_t = apply_reranking(
         device, model_base_path, model_vector_minus_path,
         model_vector_plus_path, test_corpus, test_queries,
-        results_bm25_test, coef=0.0
+        results_bm25_test, coef=0.0, batch_size=batch_size
     )
     run_theta_t = Run(results_theta_t, name=f'{model_name}-sum-lambda-0')
     fused_theta_t = fuse(
@@ -136,7 +137,7 @@ def main(model_base_path, model_vector_minus_path, model_vector_plus_path,
     results_ta = apply_reranking(
         device, model_base_path, model_vector_minus_path,
         model_vector_plus_path, test_corpus, test_queries,
-        results_bm25_test, coef=alfa
+        results_bm25_test, coef=alfa, batch_size=batch_size
     )
     run_ta = Run(results_ta, name=f'{model_name}-sum-lambda-{alfa}')
     fused_ta = fuse(
@@ -154,7 +155,7 @@ def main(model_base_path, model_vector_minus_path, model_vector_plus_path,
         logger.info(f'Running baseline: {label}...')
         results = evaluate_baseline(
             device, path, token_false, token_true,
-            test_corpus, test_queries, results_bm25_test
+            test_corpus, test_queries, results_bm25_test, batch_size=batch_size
         )
         run_baseline = Run(results, name=label)
         fused_baseline = fuse(
